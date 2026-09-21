@@ -129,7 +129,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var taskScrollView: NSScrollView?
     var scale: CGFloat = 1
     var scaledEffect: ScaledEffectView?
-    var gripStartScale: CGFloat = 1
+    var gripResize = GripResizeSession()
+    var edgeResize: EdgeResizeSession?
     var changingScale = false
     var designSize = NSSize(width: 320, height: 400)
     var maximumScale: CGFloat {
@@ -212,6 +213,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return field
     }
     func buildUI() {
+        let retainedScale = scale
+        let wasChangingScale = changingScale
+        changingScale = true
+        defer { changingScale = wasChangingScale }
         let scrollPosition = taskScrollView?.contentView.bounds.origin ?? .zero
         designSize.width = TaskLayout.width(for: state.tasks)
         let effect = ScaledEffectView(frame: panel.contentView?.bounds ?? .zero, designSize: designSize)
@@ -297,12 +302,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         grip.setAccessibilityLabel("拖动等比缩放界面")
         grip.widthAnchor.constraint(equalToConstant: 44).isActive = true
         grip.heightAnchor.constraint(equalToConstant: 30).isActive = true
-        grip.beginDrag = { [weak self] in self?.gripStartScale = self?.scale ?? 1 }
+        grip.beginDrag = { [weak self] in self?.gripResize = GripResizeSession() }
         grip.dragBy = { [weak self] delta in
             guard let self = self else { return }
-            let size = self.designSize
-            let amount = (delta.x * size.width - delta.y * size.height) / (size.width * size.width + size.height * size.height)
-            self.applyScale(self.gripStartScale + amount, persist: false)
+            let next = self.gripResize.scale(for: delta, current: self.scale,
+                                            design: self.designSize, maximumScale: self.maximumScale)
+            self.applyScale(next, persist: false)
         }
         grip.endDrag = { [weak self] in self?.rememberSize() }
         actions.addArrangedSubview(grip)
@@ -396,49 +401,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         designSize.height = ceil(min(naturalHeight, (screenHeight * 0.86 - ScaledEffectView.titlebarInset) / max(scale, 0.75)))
         effect.designSize = designSize
         configureScaleLimits()
-        applyScale(scale, persist: false)
+        applyScale(retainedScale, persist: false)
         effect.layoutSubtreeIfNeeded()
         scroll.contentView.scroll(to: scroll.contentView.constrainBoundsRect(NSRect(origin: scrollPosition, size: scroll.contentView.bounds.size)).origin)
         scroll.reflectScrolledClipView(scroll.contentView)
     }
     func configureScaleLimits() {
-        panel.contentAspectRatio = .zero
+        let wasChangingScale = changingScale
+        changingScale = true
+        defer { changingScale = wasChangingScale }
+        // Clear any old aspect constraint with valid one-point increments.
+        panel.contentResizeIncrements = NSSize(width: 1, height: 1)
         panel.contentMinSize = NSSize(width: designSize.width * 0.75, height: designSize.height * 0.75 + ScaledEffectView.titlebarInset)
         panel.contentMaxSize = NSSize(width: designSize.width * maximumScale, height: designSize.height * maximumScale + ScaledEffectView.titlebarInset)
     }
     func applyScale(_ requested: CGFloat, persist: Bool = true) {
         scale = min(maximumScale, max(0.75, requested))
+        let wasChangingScale = changingScale
         changingScale = true
+        defer { changingScale = wasChangingScale }
         let oldTop = panel.frame.maxY
         let screen = panel.screen?.visibleFrame ?? NSScreen.main!.visibleFrame
         panel.setContentSize(NSSize(width: designSize.width * scale, height: designSize.height * scale + ScaledEffectView.titlebarInset))
         panel.setFrameOrigin(NSPoint(x: min(max(panel.frame.minX, screen.minX), screen.maxX - panel.frame.width),
                                      y: max(screen.minY, min(oldTop, screen.maxY) - panel.frame.height)))
         scaledEffect?.updateCanvas()
-        changingScale = false
         if persist { rememberSize() }
     }
     func rememberSize() {
         UserDefaults.standard.set(Double(scale), forKey: "InterfaceScale")
         panel.saveFrame(usingName: "DailyTodoPanel")
     }
+    func windowWillStartLiveResize(_ notification: Notification) {
+        edgeResize = EdgeResizeSession(initialSize: panel.contentRect(forFrameRect: panel.frame).size)
+    }
     func windowWillResize(_ sender: NSWindow, to proposed: NSSize) -> NSSize {
-        guard !changingScale else { return proposed }
-        let deltaWidth = abs(proposed.width - sender.frame.width)
-        let deltaHeight = abs(proposed.height - sender.frame.height)
-        let requested = deltaWidth >= deltaHeight
-            ? proposed.width / designSize.width
-            : (proposed.height - ScaledEffectView.titlebarInset) / designSize.height
-        let clamped = min(maximumScale, max(0.75, requested))
-        return NSSize(width: designSize.width * clamped,
-                      height: designSize.height * clamped + ScaledEffectView.titlebarInset)
+        guard !changingScale, sender.inLiveResize else { return proposed }
+        if edgeResize == nil {
+            edgeResize = EdgeResizeSession(initialSize: sender.contentRect(forFrameRect: sender.frame).size)
+        }
+        let content = sender.contentRect(forFrameRect: NSRect(origin: .zero, size: proposed)).size
+        let result = edgeResize!.size(for: content, design: designSize,
+                                      inset: ScaledEffectView.titlebarInset, maximumScale: maximumScale)
+        return sender.frameRect(forContentRect: NSRect(origin: .zero, size: result)).size
     }
     func windowDidResize(_ notification: Notification) {
         guard !changingScale, panel != nil else { return }
-        scale = (panel.contentView?.frame.width ?? designSize.width) / designSize.width
+        // Content-view replacement and layout also emit resize notifications.
+        // Only a native user gesture may update the stored zoom from geometry.
+        if panel.inLiveResize {
+            scale = min(maximumScale, max(0.75, panel.contentRect(forFrameRect: panel.frame).width / designSize.width))
+        }
         scaledEffect?.updateCanvas()
     }
-    func windowDidEndLiveResize(_ notification: Notification) { rememberSize() }
+    func windowDidEndLiveResize(_ notification: Notification) {
+        edgeResize = nil
+        rememberSize()
+    }
     @objc func toggleCompact() {
         compact.toggle()
         UserDefaults.standard.set(compact, forKey: "CompactMode")

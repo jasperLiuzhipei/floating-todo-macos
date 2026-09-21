@@ -2,6 +2,7 @@
 
 ## 结构
 
+- `Sources/ResizeGeometry.swift`：边缘拖动的方向锁定、手柄防抖与边界反向恢复。
 - `Sources/main.swift`：AppKit 悬浮窗、内容测量、缩放、原生添加、菜单栏设置、提醒与可选 Codex 入口。
 - `Sources/Storage.swift`：数据校验、文件锁、原子写入、每日归档和未完成任务承接。
 - `scripts/todo_cli.py`：供外部助手安全追加任务，无第三方 Python 依赖。
@@ -18,7 +19,7 @@ python3 scripts/build_app.py
 "dist/Floating Todo.app/Contents/MacOS/FloatingTodo" --data-dir /tmp/floating-todo-dev
 ```
 
-布局检查覆盖最小 / 最大宽度和长标题测量；存储检查覆盖首启、跨日快照、未完成承接、重试、重复 ID、损坏数据保留。UI 仍需手动验证：首次添加、勾选撤销、长任务换行、精简展开、小尺寸标题栏、拖动手柄、关闭后双击重开。
+缩放回归检查覆盖单击抖动、侧边/底边连续拖拽、尺寸上下限及反向恢复；布局检查覆盖最小 / 最大宽度和长标题测量；存储检查覆盖首启、跨日快照、未完成承接、重试、重复 ID、损坏数据保留。UI 仍需手动验证：首次添加、勾选撤销、长任务换行、精简展开、小尺寸标题栏、拖动手柄、关闭后双击重开。
 
 测试中不要使用真实工作数据。`--data-dir` 可隔离任务与设置 JSON；窗口位置、缩放、精简状态仍保存在该应用的 macOS UserDefaults 中。
 
