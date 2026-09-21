@@ -1,0 +1,41 @@
+name: Release macOS
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag, e.g. v0.1.0'
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          assert os.environ['RELEASE_TAG'] == 'v' + Path('VERSION').read_text().strip()
+          PY
+      - run: python3 scripts/test.py
+      - run: python3 scripts/build_app.py
+      - name: Publish artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/*.zip dist/*.sha256 --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/*.zip dist/*.sha256 --generate-notes --title "Floating Todo $RELEASE_TAG"
+          fi

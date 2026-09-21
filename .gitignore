@@ -1,0 +1,16 @@
+.DS_Store
+__pycache__/
+*.pyc
+.build/
+dist/
+*.app/
+*.dmg
+*.zip
+*.log
+.todo.lock
+tasks.json
+settings.json
+今日待办.json
+history/
+.env
+.env.*
