@@ -17,7 +17,7 @@
 3. 点击右上角 **＋添加**，输入任务。无需终端、Python、API Key 或 Codex。
 4. 完成任务后勾选；菜单栏入口可重新打开窗口、设置提醒或查看历史文件。
 
-发布包包含 Apple Silicon 与 Intel 两种架构，最低部署版本为 **macOS 13**。当前在 Apple Silicon 上做过实际启动验证；Intel 和 macOS 13 的真机验证仍待补充。
+发布包包含 Apple Silicon 与 Intel 两种架构，最低部署版本为 **macOS 13**。当前在 Apple Silicon 上通过构建、存储和布局测试；独立发布包的首次启动检查以及 Intel / macOS 13 真机验证仍待补充。
 
 **首次打开提示：** 当前社区版本使用本地临时签名，尚未通过 Apple Developer ID 签名和公证。从互联网下载后，macOS 可能要求在「系统设置 → 隐私与安全」中确认“仍要打开”。仅在你确认下载来源可信后操作，参见 [Apple 官方说明](https://support.apple.com/102445)。之后可正常双击使用。无需关闭系统安全保护。
 
